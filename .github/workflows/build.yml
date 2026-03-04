@@ -28,4 +28,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/tommyzamm/homeassistant-ca:stable
+          tags: ghcr.io/tommyzam/homeassistant-ca:stable
