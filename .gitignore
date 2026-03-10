@@ -1,0 +1,19 @@
+# secrets / credentials
+*.env
+*.pem
+*.key
+*.crt
+secrets.yaml
+kubeconfig
+*.kubeconfig
+
+# runtime / db / logs
+*.db
+*.db-shm
+*.db-wal
+*.log
+
+# local configs and exports
+config/
+exports/
+tmp/
