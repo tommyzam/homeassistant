@@ -63,9 +63,11 @@ metadata:
   name: mosquitto
   namespace: ha
 spec:
+  type: NodePort
   selector:
     app: mosquitto
   ports:
   - name: mqtt
     port: 1883
     targetPort: 1883
+    nodePort: 31883
