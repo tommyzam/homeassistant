@@ -1,3 +1,4 @@
+cat > mosquitto.yaml <<'EOF'
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -9,7 +10,8 @@ data:
     persistence_location /mosquitto/data/
     log_dest stdout
     listener 1883
-    allow_anonymous true
+    allow_anonymous false
+    password_file /mosquitto/config/passwordfile
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -38,21 +40,47 @@ spec:
       labels:
         app: mosquitto
     spec:
+      initContainers:
+      - name: setup-mosquitto-config
+        image: eclipse-mosquitto:2
+        env:
+        - name: MQTT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: mqtt-auth
+              key: MQTT_USERNAME
+        - name: MQTT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mqtt-auth
+              key: MQTT_PASSWORD
+        command:
+        - /bin/sh
+        - -c
+        - |
+          cp /config-src/mosquitto.conf /work/mosquitto.conf
+          mosquitto_passwd -b -c /work/passwordfile "$MQTT_USERNAME" "$MQTT_PASSWORD"
+        volumeMounts:
+        - name: config-src
+          mountPath: /config-src
+        - name: config-work
+          mountPath: /work
       containers:
       - name: mosquitto
         image: eclipse-mosquitto:2
         ports:
         - containerPort: 1883
         volumeMounts:
-        - name: config
-          mountPath: /mosquitto/config/mosquitto.conf
-          subPath: mosquitto.conf
+        - name: config-work
+          mountPath: /mosquitto/config
         - name: data
           mountPath: /mosquitto/data
       volumes:
-      - name: config
+      - name: config-src
         configMap:
           name: mosquitto-config
+      - name: config-work
+        emptyDir: {}
       - name: data
         persistentVolumeClaim:
           claimName: mosquitto-data
@@ -71,3 +99,4 @@ spec:
     port: 1883
     targetPort: 1883
     nodePort: 31883
+EOF
