@@ -59,6 +59,7 @@ spec:
         - |
           cp /config-src/mosquitto.conf /work/mosquitto.conf
           mosquitto_passwd -b -c /work/passwordfile "$MQTT_USERNAME" "$MQTT_PASSWORD"
+          chmod 644 /work/mosquitto.conf /work/passwordfile
         volumeMounts:
         - name: config-src
           mountPath: /config-src
