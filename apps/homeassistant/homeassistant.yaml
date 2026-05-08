@@ -23,7 +23,7 @@ spec:
   template:
     metadata:
       annotations:
-        skylight-dashboard-version: rest-events-v1
+        skylight-dashboard-version: time-align-v1
       labels:
         app: homeassistant
     spec:
