@@ -22,6 +22,8 @@ spec:
       app: homeassistant
   template:
     metadata:
+      annotations:
+        skylight-dashboard-version: google-calendars-v1
       labels:
         app: homeassistant
     spec:
