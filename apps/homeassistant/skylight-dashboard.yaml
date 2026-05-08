@@ -56,7 +56,7 @@ data:
         }
 
     items = resources.setdefault("data", {}).setdefault("items", [])
-    url = "/local/skylight-calendar-card.js?v=3"
+    url = "/local/skylight-calendar-card.js?v=4"
     items[:] = [item for item in items if "skylight-calendar-card.js" not in item.get("url", "")]
     items.append({"id": "skylight_calendar_card", "url": url, "type": "module"})
     storage_path.write_text(json.dumps(resources, indent=2) + "\n")
@@ -188,7 +188,7 @@ data:
                   start: start.toISOString(),
                   end: end.toISOString(),
                 });
-                const events = response?.events || response || [];
+                const events = this._calendarEventsFromResponse(response, calendar.entity);
                 return events.map((event) => ({ ...event, entity_id: calendar.entity }));
               } catch (error) {
                 console.warn(`Unable to load ${calendar.entity}`, error);
@@ -201,6 +201,18 @@ data:
           this._loading = false;
           this._render();
         }
+      }
+
+      _calendarEventsFromResponse(response, entityId) {
+        if (Array.isArray(response)) return response;
+        if (Array.isArray(response?.events)) return response.events;
+        if (Array.isArray(response?.[entityId]?.events)) return response[entityId].events;
+
+        return Object.values(response || {}).flatMap((value) => {
+          if (Array.isArray(value)) return value;
+          if (Array.isArray(value?.events)) return value.events;
+          return [];
+        });
       }
 
       _refreshEvents() {
