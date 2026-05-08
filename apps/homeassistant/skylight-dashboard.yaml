@@ -56,8 +56,8 @@ data:
         }
 
     items = resources.setdefault("data", {}).setdefault("items", [])
-    url = "/local/skylight-calendar-card.js?v=1"
-    items[:] = [item for item in items if item.get("url") != url]
+    url = "/local/skylight-calendar-card.js?v=2"
+    items[:] = [item for item in items if "skylight-calendar-card.js" not in item.get("url", "")]
     items.append({"id": "skylight_calendar_card", "url": url, "type": "module"})
     storage_path.write_text(json.dumps(resources, indent=2) + "\n")
     PY
@@ -105,6 +105,9 @@ data:
         this._events = [];
         this._loading = false;
         this._lastRangeKey = "";
+        this._dayOffset = 0;
+        this._activeCalendar = "all";
+        this._selectedEventId = "";
         this._timer = window.setInterval(() => this._render(), 60000);
       }
 
@@ -146,6 +149,7 @@ data:
 
       _range() {
         const start = this._startOfDay(new Date());
+        start.setDate(start.getDate() + this._dayOffset);
         const end = new Date(start);
         end.setDate(start.getDate() + Number(this.config.days || 5));
         return { start, end };
@@ -197,6 +201,31 @@ data:
         }
       }
 
+      _refreshEvents() {
+        this._lastRangeKey = "";
+        this._events = [];
+        this._loadEvents();
+        this._render();
+      }
+
+      _shiftDays(days) {
+        this._dayOffset += days;
+        this._selectedEventId = "";
+        this._refreshEvents();
+      }
+
+      _goToday() {
+        this._dayOffset = 0;
+        this._selectedEventId = "";
+        this._refreshEvents();
+      }
+
+      _toggleCalendar(entity) {
+        this._activeCalendar = this._activeCalendar === entity ? "all" : entity;
+        this._selectedEventId = "";
+        this._render();
+      }
+
       _formatTime(date) {
         if (!date) return "";
         return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).replace(":00", "");
@@ -219,8 +248,94 @@ data:
         });
       }
 
+      _visibleEventsForDay(day) {
+        const events = this._eventsForDay(day);
+        if (this._activeCalendar === "all") return events;
+        return events.filter((event) => event.entity_id === this._activeCalendar);
+      }
+
       _allDay(event) {
         return Boolean(event.start?.date || event.end?.date) && !event.start?.dateTime && !event.end?.dateTime;
+      }
+
+      _eventId(event) {
+        return btoa(unescape(encodeURIComponent([
+          event.entity_id,
+          event.uid || event.summary || event.message || "",
+          event.start?.dateTime || event.start?.date || "",
+          event.end?.dateTime || event.end?.date || "",
+        ].join("|")))).replace(/=+$/g, "");
+      }
+
+      _eventById(id) {
+        return this._events.find((event) => this._eventId(event) === id);
+      }
+
+      _selectEvent(id) {
+        this._selectedEventId = id;
+        this._render();
+      }
+
+      _closeDetails() {
+        this._selectedEventId = "";
+        this._render();
+      }
+
+      _escape(value) {
+        return String(value || "").replace(/[&<>"']/g, (char) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#039;",
+        }[char]));
+      }
+
+      _formatDateTime(date) {
+        if (!date) return "";
+        return date.toLocaleString([], {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }).replace(":00", "");
+      }
+
+      _selectedEventMarkup() {
+        const event = this._eventById(this._selectedEventId);
+        if (!event) return "";
+
+        const calendar = this._calendarFor(event.entity_id);
+        const start = this._eventTime(event.start);
+        const end = this._eventTime(event.end);
+        const title = this._escape(event.summary || event.message || "Calendar event");
+        const location = this._escape(event.location || "");
+        const description = this._escape(event.description || "");
+        const time = this._allDay(event)
+          ? "All day"
+          : `${this._formatDateTime(start)} - ${this._formatTime(end)}`;
+
+        return `
+          <div class="overlay" data-action="close-details">
+            <section class="details" style="--detail-color:${calendar.color || "#6b9bd2"}" data-action="keep-open">
+              <button class="icon-button close" type="button" data-action="close-details" aria-label="Close">
+                <ha-icon icon="mdi:close"></ha-icon>
+              </button>
+              <div class="detail-accent"></div>
+              <div class="detail-header">
+                <span class="avatar" style="background:${calendar.color || "#6b9bd2"}">${calendar.initial || calendar.name?.[0] || "?"}</span>
+                <div>
+                  <div class="detail-calendar">${this._escape(calendar.name || event.entity_id)}</div>
+                  <h2>${title}</h2>
+                </div>
+              </div>
+              <div class="detail-row"><ha-icon icon="mdi:clock-outline"></ha-icon><span>${this._escape(time)}</span></div>
+              ${location ? `<div class="detail-row"><ha-icon icon="mdi:map-marker-outline"></ha-icon><span>${location}</span></div>` : ""}
+              ${description ? `<p class="detail-description">${description}</p>` : ""}
+            </section>
+          </div>
+        `;
       }
 
       _eventStyle(event) {
@@ -368,6 +483,43 @@ data:
               font-size: 12px;
             }
 
+            .controls {
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              padding: 4px;
+              border-radius: 999px;
+              background: #f5f6f7;
+            }
+
+            .icon-button,
+            .text-button {
+              border: 0;
+              border-radius: 999px;
+              background: transparent;
+              color: #53606a;
+              cursor: pointer;
+              display: inline-grid;
+              place-items: center;
+              font: 700 12px Arial, sans-serif;
+            }
+
+            .icon-button {
+              width: 30px;
+              height: 30px;
+            }
+
+            .text-button {
+              min-width: 52px;
+              height: 30px;
+              padding: 0 10px;
+            }
+
+            .icon-button:hover,
+            .text-button:hover {
+              background: #e7ecef;
+            }
+
             .pill {
               padding: 7px 12px;
               border-radius: 999px;
@@ -399,6 +551,22 @@ data:
               align-items: center;
               gap: 10px;
               min-width: 0;
+              border: 0;
+              background: transparent;
+              cursor: pointer;
+              padding: 0;
+              text-align: left;
+              color: inherit;
+              opacity: 0.48;
+              transition: opacity 120ms ease, transform 120ms ease;
+            }
+
+            .person.active {
+              opacity: 1;
+            }
+
+            .person:hover {
+              transform: translateY(-1px);
             }
 
             .name {
@@ -462,6 +630,7 @@ data:
             .meal {
               height: 20px;
               border-radius: 10px;
+              border: 0;
               padding: 0 10px;
               display: flex;
               align-items: center;
@@ -473,6 +642,8 @@ data:
               white-space: nowrap;
               overflow: hidden;
               text-overflow: ellipsis;
+              cursor: pointer;
+              width: 100%;
             }
 
             .time-col {
@@ -514,6 +685,16 @@ data:
               box-sizing: border-box;
               overflow: hidden;
               box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+              border: 0;
+              cursor: pointer;
+              text-align: left;
+              font: inherit;
+              transition: transform 120ms ease, filter 120ms ease;
+            }
+
+            .event:hover {
+              filter: saturate(1.05);
+              transform: translateY(-1px);
             }
 
             .event-title {
@@ -549,6 +730,99 @@ data:
               color: #73808a;
               background: rgba(255, 255, 255, 0.68);
               font-weight: 700;
+            }
+
+            .empty {
+              position: absolute;
+              inset: 0;
+              display: grid;
+              place-items: center;
+              color: #9aa4aa;
+              font-size: 13px;
+              font-weight: 700;
+              padding: 16px;
+              text-align: center;
+            }
+
+            .overlay {
+              position: fixed;
+              inset: 0;
+              z-index: 10;
+              display: grid;
+              place-items: center;
+              background: rgba(31, 35, 38, 0.26);
+              padding: 24px;
+              box-sizing: border-box;
+              font-family: Arial, sans-serif;
+            }
+
+            .details {
+              position: relative;
+              width: min(460px, 100%);
+              border-radius: 8px;
+              background: #fffefa;
+              box-shadow: 0 18px 48px rgba(24, 30, 34, 0.28);
+              padding: 24px;
+              box-sizing: border-box;
+              overflow: hidden;
+            }
+
+            .detail-accent {
+              position: absolute;
+              inset: 0 auto 0 0;
+              width: 8px;
+              background: var(--detail-color);
+            }
+
+            .close {
+              position: absolute;
+              top: 12px;
+              right: 12px;
+            }
+
+            .detail-header {
+              display: grid;
+              grid-template-columns: 40px 1fr;
+              align-items: center;
+              gap: 14px;
+              padding-right: 38px;
+              margin-bottom: 18px;
+            }
+
+            .detail-calendar {
+              color: #68737b;
+              font-size: 12px;
+              font-weight: 800;
+              margin-bottom: 4px;
+            }
+
+            .details h2 {
+              margin: 0;
+              color: #28251f;
+              font: 700 22px Georgia, "Times New Roman", serif;
+              line-height: 1.15;
+            }
+
+            .detail-row {
+              display: grid;
+              grid-template-columns: 24px 1fr;
+              align-items: center;
+              gap: 10px;
+              color: #3d464d;
+              font-size: 14px;
+              font-weight: 700;
+              margin-top: 12px;
+            }
+
+            .detail-row ha-icon {
+              color: #7b878e;
+            }
+
+            .detail-description {
+              margin: 18px 0 0;
+              color: #4d555b;
+              line-height: 1.45;
+              white-space: pre-wrap;
             }
 
             @media (max-width: 900px) {
@@ -609,21 +883,32 @@ data:
                     <div class="time">${this._formatTime(now)}</div>
                   </div>
                   <div class="actions">
-                    <span class="pill">Magic Import</span>
+                    <div class="controls" aria-label="Calendar controls">
+                      <button class="icon-button" type="button" data-action="previous" aria-label="Previous days">
+                        <ha-icon icon="mdi:chevron-left"></ha-icon>
+                      </button>
+                      <button class="text-button" type="button" data-action="today">Today</button>
+                      <button class="icon-button" type="button" data-action="next" aria-label="Next days">
+                        <ha-icon icon="mdi:chevron-right"></ha-icon>
+                      </button>
+                    </div>
                     ${calendars.slice(0, 4).map((calendar) => `<span class="avatar" style="background:${calendar.color}">${calendar.initial || calendar.name?.[0] || "?"}</span>`).join("")}
-                    <span class="pill">Schedule</span>
+                    <button class="icon-button pill" type="button" data-action="refresh" aria-label="Refresh calendar">
+                      <ha-icon icon="mdi:refresh"></ha-icon>
+                    </button>
                   </div>
                 </section>
                 <section class="people">
                   ${calendars.map((calendar) => {
                     const count = this._events.filter((event) => event.entity_id === calendar.entity).length;
+                    const active = this._activeCalendar === "all" || this._activeCalendar === calendar.entity;
                     return `
-                      <div class="person" style="--person-color:${calendar.color}">
+                      <button class="person ${active ? "active" : ""}" type="button" data-action="filter-calendar" data-entity="${calendar.entity}" style="--person-color:${calendar.color}">
                         <span class="avatar" style="background:${calendar.color}">${calendar.initial || calendar.name?.[0] || "?"}</span>
                         <span class="name">${calendar.name || calendar.entity}</span>
                         <span class="count">${count}</span>
                         <span class="line"></span>
-                      </div>
+                      </button>
                     `;
                   }).join("")}
                 </section>
@@ -637,10 +922,10 @@ data:
                   `).join("")}
                   <div></div>
                   ${days.map((day) => {
-                    const allDay = this._eventsForDay(day).filter((event) => this._allDay(event)).slice(0, 1);
+                    const allDay = this._visibleEventsForDay(day).filter((event) => this._allDay(event)).slice(0, 1);
                     return `
                       <div class="all-day">
-                        ${allDay.map((event) => `<div class="meal"><ha-icon icon="mdi:silverware-fork-knife"></ha-icon>${event.summary || event.message || "All day"}</div>`).join("")}
+                        ${allDay.map((event) => `<button class="meal" type="button" data-action="select-event" data-event-id="${this._eventId(event)}"><ha-icon icon="mdi:calendar-star"></ha-icon>${this._escape(event.summary || event.message || "All day")}</button>`).join("")}
                       </div>
                     `;
                   }).join("")}
@@ -649,26 +934,52 @@ data:
                   </div>
                   ${days.map((day) => `
                     <div class="day-col">
-                      ${this._eventsForDay(day).filter((event) => !this._allDay(event)).map((event) => {
+                      ${this._visibleEventsForDay(day).filter((event) => !this._allDay(event)).map((event) => {
                         const calendar = this._calendarFor(event.entity_id);
                         const start = this._eventTime(event.start);
                         const end = this._eventTime(event.end);
                         return `
-                          <article class="event" style="${this._eventStyle(event)}">
-                            <div class="event-title">${event.summary || event.message || "Calendar event"}</div>
+                          <button class="event" type="button" data-action="select-event" data-event-id="${this._eventId(event)}" style="${this._eventStyle(event)}">
+                            <div class="event-title">${this._escape(event.summary || event.message || "Calendar event")}</div>
                             <div class="event-time">${this._formatTime(start)} - ${this._formatTime(end)}</div>
                             <span class="avatar" style="background:${calendar.color || "#6b9bd2"}">${calendar.initial || calendar.name?.[0] || "?"}</span>
-                          </article>
+                          </button>
                         `;
                       }).join("")}
+                      ${!this._loading && !this._visibleEventsForDay(day).length ? `<div class="empty">No events</div>` : ""}
                       ${this._loading ? `<div class="loading">Loading calendar</div>` : ""}
                     </div>
                   `).join("")}
                 </section>
               </main>
             </div>
+            ${this._selectedEventMarkup()}
           </ha-card>
         `;
+        this._bindInteractions();
+      }
+
+      _bindInteractions() {
+        this.shadowRoot.querySelectorAll("[data-action]").forEach((node) => {
+          node.addEventListener("click", (event) => {
+            const action = node.dataset.action;
+            if (action === "keep-open") {
+              event.stopPropagation();
+              return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (action === "previous") this._shiftDays(-Number(this.config.days || 5));
+            if (action === "next") this._shiftDays(Number(this.config.days || 5));
+            if (action === "today") this._goToday();
+            if (action === "refresh") this._refreshEvents();
+            if (action === "filter-calendar") this._toggleCalendar(node.dataset.entity);
+            if (action === "select-event") this._selectEvent(node.dataset.eventId);
+            if (action === "close-details") this._closeDetails();
+          });
+        });
       }
     }
 
