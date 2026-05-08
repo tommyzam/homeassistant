@@ -56,7 +56,7 @@ data:
         }
 
     items = resources.setdefault("data", {}).setdefault("items", [])
-    url = "/local/skylight-calendar-card.js?v=5"
+    url = "/local/skylight-calendar-card.js?v=6"
     items[:] = [item for item in items if "skylight-calendar-card.js" not in item.get("url", "")]
     items.append({"id": "skylight_calendar_card", "url": url, "type": "module"})
     storage_path.write_text(json.dumps(resources, indent=2) + "\n")
@@ -186,12 +186,14 @@ data:
           const eventLists = await Promise.all(
             calendars.map(async (calendar) => {
               try {
-                const response = await this._hass.callWS({
-                  type: "calendar/event/list",
-                  entity_id: calendar.entity,
+                const params = new URLSearchParams({
                   start: start.toISOString(),
                   end: end.toISOString(),
                 });
+                const response = await this._hass.callApi(
+                  "GET",
+                  `calendars/${encodeURIComponent(calendar.entity)}?${params.toString()}`
+                );
                 const events = this._calendarEventsFromResponse(response, calendar.entity);
                 return events.map((event) => ({ ...event, entity_id: calendar.entity }));
               } catch (error) {
