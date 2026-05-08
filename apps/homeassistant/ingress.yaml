@@ -9,10 +9,10 @@ spec:
   ingressClassName: traefik
   tls:
   - hosts:
-    - homeassistant.lab.local
-    secretName: homeassistant-lab-local-tls
+    - homeassistant.lab.lan
+    secretName: homeassistant-lab-lan-tls
   rules:
-  - host: homeassistant.lab.local
+  - host: homeassistant.lab.lan
     http:
       paths:
       - path: /
