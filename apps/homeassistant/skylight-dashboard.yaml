@@ -1,0 +1,652 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: homeassistant-skylight-dashboard
+  namespace: ha
+data:
+  install-skylight-dashboard.sh: |
+    #!/bin/sh
+    set -eu
+
+    mkdir -p /config/www /config/dashboards
+    cp /skylight/skylight-calendar-card.js /config/www/skylight-calendar-card.js
+    cp /skylight/skylight-calendar.yaml /config/dashboards/skylight-calendar.yaml
+    cp /skylight/lovelace-skylight.yaml /config/lovelace-skylight.yaml
+
+    touch /config/configuration.yaml
+
+    if grep -Eq '^lovelace:' /config/configuration.yaml; then
+      if ! grep -q 'skylight-calendar' /config/configuration.yaml; then
+        echo "Existing lovelace: config found. Add /config/lovelace-skylight.yaml to your lovelace configuration manually."
+      fi
+    else
+      cat >> /config/configuration.yaml <<'EOF'
+
+    # Managed by the ha-image Skylight dashboard manifest.
+    lovelace: !include lovelace-skylight.yaml
+    EOF
+    fi
+
+  lovelace-skylight.yaml: |
+    resources:
+      - url: /local/skylight-calendar-card.js?v=1
+        type: module
+    dashboards:
+      skylight-calendar:
+        mode: yaml
+        title: Skylight Calendar
+        icon: mdi:calendar-week
+        show_in_sidebar: true
+        filename: dashboards/skylight-calendar.yaml
+
+  skylight-calendar.yaml: |
+    title: Skylight Calendar
+    views:
+      - title: Calendar
+        path: calendar
+        type: panel
+        badges: []
+        cards:
+          - type: custom:skylight-calendar-card
+            title: Miller Family
+            start_hour: 6
+            end_hour: 22
+            days: 5
+            calendars:
+              - entity: calendar.emma
+                name: Emma
+                initial: E
+                color: "#c260d8"
+              - entity: calendar.ethan
+                name: Ethan
+                initial: E
+                color: "#68cbd1"
+              - entity: calendar.john
+                name: John
+                initial: J
+                color: "#5b94d6"
+              - entity: calendar.lainey
+                name: Lainey
+                initial: L
+                color: "#ef6fa3"
+              - entity: calendar.family
+                name: Family
+                initial: M
+                color: "#f5bd45"
+
+  skylight-calendar-card.js: |
+    class SkylightCalendarCard extends HTMLElement {
+      constructor() {
+        super();
+        this.attachShadow({ mode: "open" });
+        this._events = [];
+        this._loading = false;
+        this._lastRangeKey = "";
+        this._timer = window.setInterval(() => this._render(), 60000);
+      }
+
+      disconnectedCallback() {
+        window.clearInterval(this._timer);
+      }
+
+      setConfig(config) {
+        this.config = {
+          title: "Family Calendar",
+          start_hour: 6,
+          end_hour: 22,
+          days: 5,
+          calendars: [],
+          ...config,
+        };
+        this._render();
+      }
+
+      set hass(hass) {
+        this._hass = hass;
+        this._loadEvents();
+        this._render();
+      }
+
+      getCardSize() {
+        return 8;
+      }
+
+      _startOfDay(date) {
+        const next = new Date(date);
+        next.setHours(0, 0, 0, 0);
+        return next;
+      }
+
+      _dateKey(date) {
+        return date.toISOString().slice(0, 10);
+      }
+
+      _range() {
+        const start = this._startOfDay(new Date());
+        const end = new Date(start);
+        end.setDate(start.getDate() + Number(this.config.days || 5));
+        return { start, end };
+      }
+
+      _calendarFor(entity) {
+        return (this.config.calendars || []).find((calendar) => calendar.entity === entity) || {};
+      }
+
+      _eventTime(value) {
+        const raw = value?.dateTime || value?.date || value;
+        if (!raw) return null;
+        return new Date(raw);
+      }
+
+      async _loadEvents() {
+        if (!this._hass || this._loading) return;
+
+        const calendars = this.config.calendars || [];
+        const { start, end } = this._range();
+        const rangeKey = `${start.toISOString()}-${end.toISOString()}-${calendars.map((calendar) => calendar.entity).join(",")}`;
+        if (rangeKey === this._lastRangeKey && this._events.length) return;
+
+        this._loading = true;
+        this._lastRangeKey = rangeKey;
+
+        try {
+          const eventLists = await Promise.all(
+            calendars.map(async (calendar) => {
+              try {
+                const response = await this._hass.callWS({
+                  type: "calendar/event/list",
+                  entity_id: calendar.entity,
+                  start: start.toISOString(),
+                  end: end.toISOString(),
+                });
+                const events = response?.events || response || [];
+                return events.map((event) => ({ ...event, entity_id: calendar.entity }));
+              } catch (error) {
+                console.warn(`Unable to load ${calendar.entity}`, error);
+                return [];
+              }
+            })
+          );
+          this._events = eventLists.flat();
+        } finally {
+          this._loading = false;
+          this._render();
+        }
+      }
+
+      _formatTime(date) {
+        if (!date) return "";
+        return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).replace(":00", "");
+      }
+
+      _days() {
+        const { start } = this._range();
+        return Array.from({ length: Number(this.config.days || 5) }, (_, index) => {
+          const day = new Date(start);
+          day.setDate(start.getDate() + index);
+          return day;
+        });
+      }
+
+      _eventsForDay(day) {
+        const key = this._dateKey(day);
+        return this._events.filter((event) => {
+          const start = this._eventTime(event.start);
+          return start && this._dateKey(start) === key;
+        });
+      }
+
+      _allDay(event) {
+        return Boolean(event.start?.date || event.end?.date) && !event.start?.dateTime && !event.end?.dateTime;
+      }
+
+      _eventStyle(event) {
+        const startHour = Number(this.config.start_hour || 6);
+        const endHour = Number(this.config.end_hour || 22);
+        const totalMinutes = Math.max(60, (endHour - startHour) * 60);
+        const start = this._eventTime(event.start);
+        const end = this._eventTime(event.end) || new Date(start.getTime() + 60 * 60 * 1000);
+
+        const startMinutes = Math.max(0, (start.getHours() - startHour) * 60 + start.getMinutes());
+        const eventMinutes = Math.max(30, (end.getTime() - start.getTime()) / 60000);
+        const top = Math.min(96, (startMinutes / totalMinutes) * 100);
+        const height = Math.max(8, Math.min(96 - top, (eventMinutes / totalMinutes) * 100));
+        const calendar = this._calendarFor(event.entity_id);
+
+        return `top:${top}%;height:${height}%;background:${calendar.color || "#b8dff0"};`;
+      }
+
+      _render() {
+        if (!this.config) return;
+
+        const calendars = this.config.calendars || [];
+        const days = this._days();
+        const now = new Date();
+        const hours = [];
+        for (let hour = Number(this.config.start_hour || 6); hour <= Number(this.config.end_hour || 22); hour += 1) {
+          hours.push(hour);
+        }
+
+        this.shadowRoot.innerHTML = `
+          <style>
+            :host {
+              display: block;
+              height: 100%;
+              min-height: 720px;
+              color: #28251f;
+              font-family: Georgia, "Times New Roman", serif;
+            }
+
+            ha-card {
+              height: 100%;
+              min-height: 720px;
+              border-radius: 0;
+              box-shadow: none;
+              background: #f8f7f3;
+              overflow: hidden;
+            }
+
+            .shell {
+              display: grid;
+              grid-template-columns: 74px 1fr;
+              height: 100%;
+              min-height: 720px;
+            }
+
+            .sidebar {
+              background: #eaf2f7;
+              border-right: 1px solid #d8e2e8;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              gap: 18px;
+              padding: 18px 8px;
+              font-family: Arial, sans-serif;
+              color: #4d5962;
+            }
+
+            .logo {
+              width: 42px;
+              height: 42px;
+              display: grid;
+              place-items: center;
+              background: white;
+              color: #9aa7ae;
+              font: 24px Georgia, serif;
+            }
+
+            .nav {
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              gap: 18px;
+              font-size: 11px;
+            }
+
+            .nav span {
+              display: grid;
+              place-items: center;
+              gap: 5px;
+            }
+
+            .nav ha-icon {
+              width: 21px;
+              height: 21px;
+              color: #687782;
+            }
+
+            .sleep {
+              margin-top: auto;
+            }
+
+            .main {
+              min-width: 0;
+              display: grid;
+              grid-template-rows: auto auto 1fr;
+              background: white;
+            }
+
+            .topbar {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 16px;
+              padding: 18px 22px 10px;
+            }
+
+            .title {
+              display: flex;
+              align-items: baseline;
+              gap: 16px;
+              min-width: 0;
+            }
+
+            .title h1 {
+              margin: 0;
+              font-size: 30px;
+              line-height: 1;
+              font-weight: 600;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+
+            .time {
+              font-size: 22px;
+              white-space: nowrap;
+            }
+
+            .actions {
+              display: flex;
+              gap: 10px;
+              align-items: center;
+              font-family: Arial, sans-serif;
+              color: #53606a;
+              font-size: 12px;
+            }
+
+            .pill {
+              padding: 7px 12px;
+              border-radius: 999px;
+              background: #f5f6f7;
+              white-space: nowrap;
+            }
+
+            .avatar {
+              width: 34px;
+              height: 34px;
+              border-radius: 999px;
+              display: grid;
+              place-items: center;
+              color: white;
+              font: 700 13px Arial, sans-serif;
+            }
+
+            .people {
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+              gap: 14px;
+              padding: 0 22px 14px;
+              font-family: Arial, sans-serif;
+            }
+
+            .person {
+              display: grid;
+              grid-template-columns: 34px 1fr auto;
+              align-items: center;
+              gap: 10px;
+              min-width: 0;
+            }
+
+            .name {
+              font-size: 13px;
+              font-weight: 700;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+            }
+
+            .count {
+              color: #7e878d;
+              font-size: 12px;
+            }
+
+            .line {
+              grid-column: 2 / 4;
+              height: 7px;
+              border-radius: 999px;
+              background: linear-gradient(90deg, var(--person-color) 68%, #e5e8eb 68%);
+            }
+
+            .calendar {
+              display: grid;
+              grid-template-columns: 64px repeat(${days.length}, minmax(150px, 1fr));
+              grid-template-rows: 64px 30px 1fr;
+              min-height: 0;
+              border-top: 1px solid #e6e5e1;
+              font-family: Arial, sans-serif;
+            }
+
+            .day-head {
+              border-left: 1px solid #e5e4df;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              gap: 7px;
+              font-family: Georgia, "Times New Roman", serif;
+              font-size: 23px;
+              background: #fff;
+            }
+
+            .today {
+              width: 24px;
+              height: 24px;
+              border-radius: 50%;
+              display: inline-grid;
+              place-items: center;
+              color: white;
+              background: #dd735d;
+              font: 700 12px Arial, sans-serif;
+            }
+
+            .all-day {
+              border-left: 1px solid #e5e4df;
+              border-top: 1px solid #efeee9;
+              padding: 4px 8px;
+              overflow: hidden;
+            }
+
+            .meal {
+              height: 20px;
+              border-radius: 10px;
+              padding: 0 10px;
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              font-size: 12px;
+              font-weight: 700;
+              background: #f7b6a3;
+              color: #653527;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+
+            .time-col {
+              grid-row: 3;
+              display: grid;
+              grid-template-rows: repeat(${hours.length}, 1fr);
+              color: #3c444a;
+              font-size: 13px;
+              text-align: right;
+              padding-right: 8px;
+            }
+
+            .time-col div {
+              transform: translateY(-7px);
+            }
+
+            .day-col {
+              position: relative;
+              border-left: 1px solid #e5e4df;
+              background:
+                repeating-linear-gradient(
+                  to bottom,
+                  transparent 0,
+                  transparent calc(${100 / Math.max(1, hours.length - 1)}% - 1px),
+                  #eeeeea calc(${100 / Math.max(1, hours.length - 1)}% - 1px),
+                  #eeeeea ${100 / Math.max(1, hours.length - 1)}%
+                );
+              overflow: hidden;
+              min-height: 520px;
+            }
+
+            .event {
+              position: absolute;
+              left: 9px;
+              right: 9px;
+              border-radius: 8px;
+              padding: 9px 30px 8px 10px;
+              color: #2f302b;
+              box-sizing: border-box;
+              overflow: hidden;
+              box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+            }
+
+            .event-title {
+              font-size: 14px;
+              font-weight: 800;
+              line-height: 1.1;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+            }
+
+            .event-time {
+              font-size: 12px;
+              font-weight: 700;
+              margin-top: 3px;
+            }
+
+            .event .avatar {
+              position: absolute;
+              right: 8px;
+              top: 8px;
+              width: 22px;
+              height: 22px;
+              font-size: 10px;
+              opacity: 0.72;
+            }
+
+            .loading {
+              position: absolute;
+              inset: 0;
+              display: grid;
+              place-items: center;
+              color: #73808a;
+              background: rgba(255, 255, 255, 0.68);
+              font-weight: 700;
+            }
+
+            @media (max-width: 900px) {
+              :host,
+              ha-card,
+              .shell {
+                min-height: 620px;
+              }
+
+              .shell {
+                grid-template-columns: 56px 1fr;
+              }
+
+              .topbar {
+                align-items: flex-start;
+                flex-direction: column;
+                padding: 14px 14px 8px;
+              }
+
+              .title h1 {
+                font-size: 24px;
+              }
+
+              .time {
+                font-size: 18px;
+              }
+
+              .people {
+                grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+                padding: 0 14px 10px;
+              }
+
+              .calendar {
+                grid-template-columns: 48px repeat(${days.length}, minmax(128px, 1fr));
+                overflow-x: auto;
+              }
+            }
+          </style>
+          <ha-card>
+            <div class="shell">
+              <aside class="sidebar">
+                <div class="logo">S</div>
+                <nav class="nav">
+                  <span><ha-icon icon="mdi:calendar-month"></ha-icon>Calendar</span>
+                  <span><ha-icon icon="mdi:broom"></ha-icon>Chores</span>
+                  <span><ha-icon icon="mdi:image"></ha-icon>Photos</span>
+                  <span><ha-icon icon="mdi:format-list-checks"></ha-icon>Lists</span>
+                </nav>
+                <nav class="nav sleep">
+                  <span><ha-icon icon="mdi:weather-night"></ha-icon>Sleep</span>
+                  <span><ha-icon icon="mdi:cog-outline"></ha-icon>Settings</span>
+                </nav>
+              </aside>
+              <main class="main">
+                <section class="topbar">
+                  <div class="title">
+                    <h1>${this.config.title}</h1>
+                    <div class="time">${this._formatTime(now)}</div>
+                  </div>
+                  <div class="actions">
+                    <span class="pill">Magic Import</span>
+                    ${calendars.slice(0, 4).map((calendar) => `<span class="avatar" style="background:${calendar.color}">${calendar.initial || calendar.name?.[0] || "?"}</span>`).join("")}
+                    <span class="pill">Schedule</span>
+                  </div>
+                </section>
+                <section class="people">
+                  ${calendars.map((calendar) => {
+                    const count = this._events.filter((event) => event.entity_id === calendar.entity).length;
+                    return `
+                      <div class="person" style="--person-color:${calendar.color}">
+                        <span class="avatar" style="background:${calendar.color}">${calendar.initial || calendar.name?.[0] || "?"}</span>
+                        <span class="name">${calendar.name || calendar.entity}</span>
+                        <span class="count">${count}</span>
+                        <span class="line"></span>
+                      </div>
+                    `;
+                  }).join("")}
+                </section>
+                <section class="calendar">
+                  <div></div>
+                  ${days.map((day) => `
+                    <div class="day-head">
+                      <span>${day.toLocaleDateString([], { weekday: "short" })}</span>
+                      ${this._dateKey(day) === this._dateKey(now) ? `<span class="today">${day.getDate()}</span>` : `<span>${day.getDate()}</span>`}
+                    </div>
+                  `).join("")}
+                  <div></div>
+                  ${days.map((day) => {
+                    const allDay = this._eventsForDay(day).filter((event) => this._allDay(event)).slice(0, 1);
+                    return `
+                      <div class="all-day">
+                        ${allDay.map((event) => `<div class="meal"><ha-icon icon="mdi:silverware-fork-knife"></ha-icon>${event.summary || event.message || "All day"}</div>`).join("")}
+                      </div>
+                    `;
+                  }).join("")}
+                  <div class="time-col">
+                    ${hours.map((hour) => `<div>${hour === 12 ? "12 pm" : hour > 12 ? `${hour - 12} pm` : `${hour} am`}</div>`).join("")}
+                  </div>
+                  ${days.map((day) => `
+                    <div class="day-col">
+                      ${this._eventsForDay(day).filter((event) => !this._allDay(event)).map((event) => {
+                        const calendar = this._calendarFor(event.entity_id);
+                        const start = this._eventTime(event.start);
+                        const end = this._eventTime(event.end);
+                        return `
+                          <article class="event" style="${this._eventStyle(event)}">
+                            <div class="event-title">${event.summary || event.message || "Calendar event"}</div>
+                            <div class="event-time">${this._formatTime(start)} - ${this._formatTime(end)}</div>
+                            <span class="avatar" style="background:${calendar.color || "#6b9bd2"}">${calendar.initial || calendar.name?.[0] || "?"}</span>
+                          </article>
+                        `;
+                      }).join("")}
+                      ${this._loading ? `<div class="loading">Loading calendar</div>` : ""}
+                    </div>
+                  `).join("")}
+                </section>
+              </main>
+            </div>
+          </ha-card>
+        `;
+      }
+    }
+
+    customElements.define("skylight-calendar-card", SkylightCalendarCard);
