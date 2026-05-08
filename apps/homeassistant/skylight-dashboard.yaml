@@ -56,7 +56,7 @@ data:
         }
 
     items = resources.setdefault("data", {}).setdefault("items", [])
-    url = "/local/skylight-calendar-card.js?v=4"
+    url = "/local/skylight-calendar-card.js?v=5"
     items[:] = [item for item in items if "skylight-calendar-card.js" not in item.get("url", "")]
     items.append({"id": "skylight_calendar_card", "url": url, "type": "module"})
     storage_path.write_text(json.dumps(resources, indent=2) + "\n")
@@ -146,7 +146,11 @@ data:
       }
 
       _dateKey(date) {
-        return date.toISOString().slice(0, 10);
+        return [
+          date.getFullYear(),
+          String(date.getMonth() + 1).padStart(2, "0"),
+          String(date.getDate()).padStart(2, "0"),
+        ].join("-");
       }
 
       _range() {

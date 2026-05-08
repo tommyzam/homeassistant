@@ -23,7 +23,7 @@ spec:
   template:
     metadata:
       annotations:
-        skylight-dashboard-version: event-list-v1
+        skylight-dashboard-version: local-date-v1
       labels:
         app: homeassistant
     spec:
