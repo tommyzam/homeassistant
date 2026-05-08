@@ -11,33 +11,56 @@ data:
     mkdir -p /config/www /config/dashboards
     cp /skylight/skylight-calendar-card.js /config/www/skylight-calendar-card.js
     cp /skylight/skylight-calendar.yaml /config/dashboards/skylight-calendar.yaml
-    cp /skylight/lovelace-skylight.yaml /config/lovelace-skylight.yaml
 
     touch /config/configuration.yaml
 
-    if grep -Eq '^lovelace:' /config/configuration.yaml; then
-      if ! grep -q 'skylight-calendar' /config/configuration.yaml; then
-        echo "Existing lovelace: config found. Add /config/lovelace-skylight.yaml to your lovelace configuration manually."
-      fi
-    else
-      cat >> /config/configuration.yaml <<'EOF'
+    python3 - <<'PY'
+    import json
+    from pathlib import Path
+
+    config_path = Path("/config/configuration.yaml")
+    text = config_path.read_text()
+    dashboard_block = """    skylight-calendar:
+          mode: yaml
+          title: Skylight Calendar
+          icon: mdi:calendar-week
+          show_in_sidebar: true
+          filename: dashboards/skylight-calendar.yaml
+    """
+
+    if "skylight-calendar:" not in text:
+        if "lovelace:" not in text:
+            text += """
 
     # Managed by the ha-image Skylight dashboard manifest.
-    lovelace: !include lovelace-skylight.yaml
-    EOF
-    fi
+    lovelace:
+      mode: storage
+      dashboards:
+    """ + dashboard_block
+        elif "  dashboards:" in text:
+            text = text.replace("  dashboards:\n", "  dashboards:\n" + dashboard_block, 1)
+        else:
+            text = text.replace("lovelace:\n", "lovelace:\n  dashboards:\n" + dashboard_block, 1)
+        config_path.write_text(text)
 
-  lovelace-skylight.yaml: |
-    resources:
-      - url: /local/skylight-calendar-card.js?v=1
-        type: module
-    dashboards:
-      skylight-calendar:
-        mode: yaml
-        title: Skylight Calendar
-        icon: mdi:calendar-week
-        show_in_sidebar: true
-        filename: dashboards/skylight-calendar.yaml
+    storage_path = Path("/config/.storage/lovelace_resources")
+    storage_path.parent.mkdir(parents=True, exist_ok=True)
+    if storage_path.exists():
+        resources = json.loads(storage_path.read_text())
+    else:
+        resources = {
+            "version": 1,
+            "minor_version": 1,
+            "key": "lovelace_resources",
+            "data": {"items": []},
+        }
+
+    items = resources.setdefault("data", {}).setdefault("items", [])
+    url = "/local/skylight-calendar-card.js?v=1"
+    items[:] = [item for item in items if item.get("url") != url]
+    items.append({"id": "skylight_calendar_card", "url": url, "type": "module"})
+    storage_path.write_text(json.dumps(resources, indent=2) + "\n")
+    PY
 
   skylight-calendar.yaml: |
     title: Skylight Calendar
