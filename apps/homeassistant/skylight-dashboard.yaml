@@ -56,7 +56,7 @@ data:
         }
 
     items = resources.setdefault("data", {}).setdefault("items", [])
-    url = "/local/skylight-calendar-card.js?v=8"
+    url = "/local/skylight-calendar-card.js?v=9"
     items[:] = [item for item in items if "skylight-calendar-card.js" not in item.get("url", "")]
     items.append({"id": "skylight_calendar_card", "url": url, "type": "module"})
     storage_path.write_text(json.dumps(resources, indent=2) + "\n")
@@ -853,8 +853,7 @@ data:
 
             .time-col {
               grid-row: 3;
-              display: grid;
-              grid-template-rows: repeat(${hours.length}, 1fr);
+              position: relative;
               color: #3c444a;
               font-size: 13px;
               text-align: right;
@@ -862,20 +861,21 @@ data:
             }
 
             .time-col div {
-              transform: translateY(-7px);
+              position: absolute;
+              right: 8px;
+              transform: translateY(-50%);
             }
 
             .day-col {
               position: relative;
               border-left: 1px solid #e5e4df;
-              background:
-                repeating-linear-gradient(
-                  to bottom,
-                  transparent 0,
-                  transparent calc(${100 / Math.max(1, hours.length - 1)}% - 1px),
-                  #eeeeea calc(${100 / Math.max(1, hours.length - 1)}% - 1px),
-                  #eeeeea ${100 / Math.max(1, hours.length - 1)}%
-                );
+              background: linear-gradient(
+                to bottom,
+                ${hours.map((_, index) => {
+                  const pos = (index / Math.max(1, hours.length - 1)) * 100;
+                  return `transparent calc(${pos}% - 0.5px), #eeeeea calc(${pos}% - 0.5px), #eeeeea calc(${pos}% + 0.5px), transparent calc(${pos}% + 0.5px)`;
+                }).join(",")}
+              );
               overflow: hidden;
               min-height: 520px;
             }
@@ -1216,7 +1216,7 @@ data:
                     `;
                   }).join("")}
                   <div class="time-col">
-                    ${hours.map((hour) => `<div>${hour === 12 ? "12 pm" : hour > 12 ? `${hour - 12} pm` : `${hour} am`}</div>`).join("")}
+                    ${hours.map((hour, index) => `<div style="top:${(index / Math.max(1, hours.length - 1)) * 100}%">${hour === 12 ? "12 pm" : hour > 12 ? `${hour - 12} pm` : `${hour} am`}</div>`).join("")}
                   </div>
                   ${days.map((day) => `
                     <div class="day-col" data-action="create-event" data-date="${this._dateKey(day)}">

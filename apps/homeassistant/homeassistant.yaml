@@ -23,7 +23,7 @@ spec:
   template:
     metadata:
       annotations:
-        skylight-dashboard-version: all-day-local-v1
+        skylight-dashboard-version: grid-lines-v1
       labels:
         app: homeassistant
     spec:
