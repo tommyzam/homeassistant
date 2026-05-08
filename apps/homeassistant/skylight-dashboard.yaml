@@ -71,31 +71,31 @@ data:
         badges: []
         cards:
           - type: custom:skylight-calendar-card
-            title: Miller Family
+            title: Family Calendar
             start_hour: 6
             end_hour: 22
             days: 5
             calendars:
-              - entity: calendar.emma
-                name: Emma
-                initial: E
-                color: "#c260d8"
-              - entity: calendar.ethan
-                name: Ethan
-                initial: E
-                color: "#68cbd1"
-              - entity: calendar.john
-                name: John
-                initial: J
-                color: "#5b94d6"
-              - entity: calendar.lainey
-                name: Lainey
-                initial: L
-                color: "#ef6fa3"
               - entity: calendar.family
                 name: Family
-                initial: M
+                initial: F
                 color: "#f5bd45"
+              - entity: calendar.airbornekilo_gmail_com
+                name: Airbornekilo
+                initial: A
+                color: "#5b94d6"
+              - entity: calendar.birthdays
+                name: Birthdays
+                initial: B
+                color: "#ef6fa3"
+              - entity: calendar.holidays_in_united_states
+                name: Holidays
+                initial: H
+                color: "#68cbd1"
+              - entity: calendar.working_location
+                name: Work Location
+                initial: W
+                color: "#c260d8"
 
   skylight-calendar-card.js: |
     class SkylightCalendarCard extends HTMLElement {
