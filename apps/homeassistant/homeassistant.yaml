@@ -23,7 +23,7 @@ spec:
   template:
     metadata:
       annotations:
-        skylight-dashboard-version: interactive-v1
+        skylight-dashboard-version: add-event-v1
       labels:
         app: homeassistant
     spec:

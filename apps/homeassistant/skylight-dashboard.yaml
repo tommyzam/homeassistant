@@ -56,7 +56,7 @@ data:
         }
 
     items = resources.setdefault("data", {}).setdefault("items", [])
-    url = "/local/skylight-calendar-card.js?v=2"
+    url = "/local/skylight-calendar-card.js?v=3"
     items[:] = [item for item in items if "skylight-calendar-card.js" not in item.get("url", "")]
     items.append({"id": "skylight_calendar_card", "url": url, "type": "module"})
     storage_path.write_text(json.dumps(resources, indent=2) + "\n")
@@ -108,6 +108,8 @@ data:
         this._dayOffset = 0;
         this._activeCalendar = "all";
         this._selectedEventId = "";
+        this._draftEvent = null;
+        this._createError = "";
         this._timer = window.setInterval(() => this._render(), 60000);
       }
 
@@ -281,6 +283,108 @@ data:
         this._render();
       }
 
+      _openCreateDialog(date, minutesFromStart = 0, allDay = false) {
+        const calendars = this.config.calendars || [];
+        const startHour = Number(this.config.start_hour || 6);
+        const start = this._startOfDay(date);
+        start.setHours(startHour, 0, 0, 0);
+        start.setMinutes(Math.max(0, Math.round(minutesFromStart / 30) * 30));
+
+        const end = new Date(start);
+        end.setHours(start.getHours() + 1);
+
+        const defaultCalendar =
+          this._activeCalendar !== "all"
+            ? this._activeCalendar
+            : calendars.find((calendar) => !/holiday|birthday|working_location/i.test(calendar.entity))?.entity || calendars[0]?.entity || "";
+
+        this._draftEvent = {
+          entity_id: defaultCalendar,
+          summary: "",
+          date: this._dateKey(date),
+          start_time: this._inputTime(start),
+          end_time: this._inputTime(end),
+          all_day: allDay,
+        };
+        this._createError = "";
+        this._selectedEventId = "";
+        this._render();
+      }
+
+      _closeCreateDialog() {
+        this._draftEvent = null;
+        this._createError = "";
+        this._render();
+      }
+
+      _inputTime(date) {
+        return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+      }
+
+      _minutesFromPointer(event, node) {
+        const rect = node.getBoundingClientRect();
+        const ratio = Math.max(0, Math.min(1, (event.clientY - rect.top) / Math.max(1, rect.height)));
+        const startHour = Number(this.config.start_hour || 6);
+        const endHour = Number(this.config.end_hour || 22);
+        return ratio * Math.max(60, (endHour - startHour) * 60);
+      }
+
+      _dateFromKey(key) {
+        const [year, month, day] = key.split("-").map(Number);
+        return new Date(year, month - 1, day);
+      }
+
+      async _saveDraftEvent(form) {
+        if (!this._hass || !form) return;
+
+        const data = new FormData(form);
+        const entityId = String(data.get("entity_id") || "");
+        const summary = String(data.get("summary") || "").trim();
+        const date = String(data.get("date") || "");
+        const allDay = data.get("all_day") === "on";
+
+        this._draftEvent = {
+          entity_id: entityId,
+          summary,
+          date,
+          start_time: String(data.get("start_time") || "09:00"),
+          end_time: String(data.get("end_time") || "10:00"),
+          all_day: allDay,
+        };
+
+        if (!entityId || !summary || !date) {
+          this._createError = "Choose a calendar, date, and title.";
+          this._render();
+          return;
+        }
+
+        const serviceData = {
+          entity_id: entityId,
+          summary,
+        };
+
+        if (allDay) {
+          const endDate = this._dateFromKey(date);
+          endDate.setDate(endDate.getDate() + 1);
+          serviceData.start_date = date;
+          serviceData.end_date = this._dateKey(endDate);
+        } else {
+          serviceData.start_date_time = `${date} ${this._draftEvent.start_time}:00`;
+          serviceData.end_date_time = `${date} ${this._draftEvent.end_time}:00`;
+        }
+
+        try {
+          this._createError = "";
+          await this._hass.callService("calendar", "create_event", serviceData);
+          this._draftEvent = null;
+          this._refreshEvents();
+        } catch (error) {
+          console.error("Unable to create calendar event", error);
+          this._createError = error?.message || "Home Assistant could not create this event.";
+          this._render();
+        }
+      }
+
       _escape(value) {
         return String(value || "").replace(/[&<>"']/g, (char) => ({
           "&": "&amp;",
@@ -334,6 +438,66 @@ data:
               ${location ? `<div class="detail-row"><ha-icon icon="mdi:map-marker-outline"></ha-icon><span>${location}</span></div>` : ""}
               ${description ? `<p class="detail-description">${description}</p>` : ""}
             </section>
+          </div>
+        `;
+      }
+
+      _createEventMarkup() {
+        if (!this._draftEvent) return "";
+        const calendars = this.config.calendars || [];
+        const draft = this._draftEvent;
+        const calendarOptions = calendars.map((calendar) => `
+          <option value="${this._escape(calendar.entity)}" ${calendar.entity === draft.entity_id ? "selected" : ""}>
+            ${this._escape(calendar.name || calendar.entity)}
+          </option>
+        `).join("");
+
+        return `
+          <div class="overlay" data-action="close-create">
+            <form class="details create-form" data-action="keep-open">
+              <button class="icon-button close" type="button" data-action="close-create" aria-label="Close">
+                <ha-icon icon="mdi:close"></ha-icon>
+              </button>
+              <div class="detail-accent"></div>
+              <div class="detail-header">
+                <span class="avatar create-avatar"><ha-icon icon="mdi:calendar-plus"></ha-icon></span>
+                <div>
+                  <div class="detail-calendar">New event</div>
+                  <h2>Add to calendar</h2>
+                </div>
+              </div>
+              <label class="field">
+                <span>Title</span>
+                <input name="summary" value="${this._escape(draft.summary)}" placeholder="Event title" required autofocus>
+              </label>
+              <label class="field">
+                <span>Calendar</span>
+                <select name="entity_id" required>${calendarOptions}</select>
+              </label>
+              <label class="field">
+                <span>Date</span>
+                <input name="date" type="date" value="${this._escape(draft.date)}" required>
+              </label>
+              <label class="check-field">
+                <input name="all_day" type="checkbox" ${draft.all_day ? "checked" : ""}>
+                <span>All day</span>
+              </label>
+              <div class="time-fields">
+                <label class="field">
+                  <span>Start</span>
+                  <input name="start_time" type="time" value="${this._escape(draft.start_time)}">
+                </label>
+                <label class="field">
+                  <span>End</span>
+                  <input name="end_time" type="time" value="${this._escape(draft.end_time)}">
+                </label>
+              </div>
+              ${this._createError ? `<div class="form-error">${this._escape(this._createError)}</div>` : ""}
+              <div class="form-actions">
+                <button class="text-button secondary" type="button" data-action="close-create">Cancel</button>
+                <button class="text-button primary" type="submit">Save</button>
+              </div>
+            </form>
           </div>
         `;
       }
@@ -646,6 +810,12 @@ data:
               width: 100%;
             }
 
+            .add-meal {
+              background: #edf2f3;
+              color: #5c6870;
+              justify-content: center;
+            }
+
             .time-col {
               grid-row: 3;
               display: grid;
@@ -825,6 +995,86 @@ data:
               white-space: pre-wrap;
             }
 
+            .create-avatar {
+              background: #4c7c87;
+            }
+
+            .create-form {
+              display: grid;
+              gap: 14px;
+            }
+
+            .field {
+              display: grid;
+              gap: 6px;
+              color: #546069;
+              font-size: 12px;
+              font-weight: 800;
+            }
+
+            .field input,
+            .field select {
+              width: 100%;
+              min-height: 42px;
+              box-sizing: border-box;
+              border: 1px solid #d7dee2;
+              border-radius: 7px;
+              background: #fff;
+              color: #252a2e;
+              font: 700 14px Arial, sans-serif;
+              padding: 0 12px;
+            }
+
+            .check-field {
+              display: flex;
+              align-items: center;
+              gap: 10px;
+              color: #3d464d;
+              font-size: 14px;
+              font-weight: 800;
+            }
+
+            .check-field input {
+              width: 18px;
+              height: 18px;
+            }
+
+            .time-fields {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 12px;
+            }
+
+            .form-error {
+              border-radius: 7px;
+              background: #fde9e4;
+              color: #8f321e;
+              padding: 10px 12px;
+              font-size: 13px;
+              font-weight: 800;
+            }
+
+            .form-actions {
+              display: flex;
+              justify-content: flex-end;
+              gap: 10px;
+              margin-top: 4px;
+            }
+
+            .form-actions .text-button {
+              min-width: 82px;
+              border-radius: 7px;
+            }
+
+            .form-actions .secondary {
+              background: #edf1f3;
+            }
+
+            .form-actions .primary {
+              background: #4c7c87;
+              color: white;
+            }
+
             @media (max-width: 900px) {
               :host,
               ha-card,
@@ -926,6 +1176,7 @@ data:
                     return `
                       <div class="all-day">
                         ${allDay.map((event) => `<button class="meal" type="button" data-action="select-event" data-event-id="${this._eventId(event)}"><ha-icon icon="mdi:calendar-star"></ha-icon>${this._escape(event.summary || event.message || "All day")}</button>`).join("")}
+                        ${!allDay.length ? `<button class="meal add-meal" type="button" data-action="create-all-day" data-date="${this._dateKey(day)}"><ha-icon icon="mdi:plus"></ha-icon>Add</button>` : ""}
                       </div>
                     `;
                   }).join("")}
@@ -933,7 +1184,7 @@ data:
                     ${hours.map((hour) => `<div>${hour === 12 ? "12 pm" : hour > 12 ? `${hour - 12} pm` : `${hour} am`}</div>`).join("")}
                   </div>
                   ${days.map((day) => `
-                    <div class="day-col">
+                    <div class="day-col" data-action="create-event" data-date="${this._dateKey(day)}">
                       ${this._visibleEventsForDay(day).filter((event) => !this._allDay(event)).map((event) => {
                         const calendar = this._calendarFor(event.entity_id);
                         const start = this._eventTime(event.start);
@@ -954,6 +1205,7 @@ data:
               </main>
             </div>
             ${this._selectedEventMarkup()}
+            ${this._createEventMarkup()}
           </ha-card>
         `;
         this._bindInteractions();
@@ -978,8 +1230,26 @@ data:
             if (action === "filter-calendar") this._toggleCalendar(node.dataset.entity);
             if (action === "select-event") this._selectEvent(node.dataset.eventId);
             if (action === "close-details") this._closeDetails();
+            if (action === "create-event") {
+              if (event.target.closest("[data-action='select-event']")) return;
+              const date = this._dateFromKey(node.dataset.date);
+              this._openCreateDialog(date, this._minutesFromPointer(event, node), false);
+            }
+            if (action === "create-all-day") {
+              this._openCreateDialog(this._dateFromKey(node.dataset.date), 0, true);
+            }
+            if (action === "close-create") this._closeCreateDialog();
           });
         });
+
+        const form = this.shadowRoot.querySelector(".create-form");
+        if (form) {
+          form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            this._saveDraftEvent(form);
+          });
+        }
       }
     }
 
