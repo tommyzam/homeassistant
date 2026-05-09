@@ -11,6 +11,8 @@ data:
     mkdir -p /config/www /config/dashboards
     cp /skylight/skylight-calendar-card.js /config/www/skylight-calendar-card.js
     cp /skylight/skylight-calendar.yaml /config/dashboards/skylight-calendar.yaml
+    cp /skylight/smart-pantry-card.js /config/www/smart-pantry-card.js
+    cp /skylight/smart-pantry.yaml /config/dashboards/smart-pantry.yaml
 
     touch /config/configuration.yaml
 
@@ -34,22 +36,34 @@ data:
           show_in_sidebar: true
           filename: dashboards/skylight-calendar.yaml
     """
+    pantry_dashboard_block = """    smart-pantry:
+          mode: yaml
+          title: Smart Pantry
+          icon: mdi:storefront-outline
+          show_in_sidebar: true
+          filename: dashboards/smart-pantry.yaml
+    """
 
     text = text.replace(wall_dashboard_block, "")
 
-    if "skylight-calendar:" not in text:
-        if "lovelace:" not in text:
-            text += """
+    if "lovelace:" not in text:
+        text += """
 
-    # Managed by the ha-image Skylight dashboard manifest.
+    # Managed by the ha-image dashboard manifest.
     lovelace:
       mode: storage
       dashboards:
-    """ + dashboard_block
-        elif "  dashboards:" in text:
-            text = text.replace("  dashboards:\n", "  dashboards:\n" + dashboard_block, 1)
-        else:
-            text = text.replace("lovelace:\n", "lovelace:\n  dashboards:\n" + dashboard_block, 1)
+    """
+
+    if "  dashboards:" not in text:
+        text = text.replace("lovelace:\n", "lovelace:\n  dashboards:\n", 1)
+
+    if "skylight-calendar:" not in text:
+        text = text.replace("  dashboards:\n", "  dashboards:\n" + dashboard_block, 1)
+
+    if "smart-pantry:" not in text:
+        text = text.replace("  dashboards:\n", "  dashboards:\n" + pantry_dashboard_block, 1)
+
     config_path.write_text(text)
 
     storage_path = Path("/config/.storage/lovelace_resources")
@@ -68,6 +82,9 @@ data:
     url = "/local/skylight-calendar-card.js?v=14"
     items[:] = [item for item in items if "skylight-calendar-card.js" not in item.get("url", "")]
     items.append({"id": "skylight_calendar_card", "url": url, "type": "module"})
+    pantry_url = "/local/smart-pantry-card.js?v=1"
+    items[:] = [item for item in items if "smart-pantry-card.js" not in item.get("url", "")]
+    items.append({"id": "smart_pantry_card", "url": pantry_url, "type": "module"})
     storage_path.write_text(json.dumps(resources, indent=2) + "\n")
     PY
 
@@ -105,6 +122,535 @@ data:
                 name: Work Location
                 initial: W
                 color: "#c260d8"
+
+  smart-pantry.yaml: |
+    title: Smart Pantry
+    views:
+      - title: Pantry
+        path: pantry
+        type: panel
+        badges: []
+        cards:
+          - type: custom:smart-pantry-card
+            title: Smart Pantry
+
+  smart-pantry-card.js: |
+    class SmartPantryCard extends HTMLElement {
+      constructor() {
+        super();
+        this.attachShadow({ mode: "open" });
+        this._storageKey = "smart-pantry-v1";
+        this._message = "";
+        this._state = this._loadState();
+      }
+
+      setConfig(config) {
+        this.config = { title: "Smart Pantry", ...config };
+        this._render();
+      }
+
+      set hass(hass) {
+        this._hass = hass;
+      }
+
+      getCardSize() {
+        return 10;
+      }
+
+      _defaultState() {
+        return {
+          pantry: [
+            { id: this._id(), name: "Rice", qty: 2, unit: "bags", category: "Grains", lowAt: 1, expires: "" },
+            { id: this._id(), name: "Black beans", qty: 4, unit: "cans", category: "Canned", lowAt: 2, expires: "" },
+            { id: this._id(), name: "Chicken breast", qty: 2, unit: "lb", category: "Protein", lowAt: 1, expires: "" },
+            { id: this._id(), name: "Tomatoes", qty: 4, unit: "each", category: "Produce", lowAt: 2, expires: "" },
+            { id: this._id(), name: "Pasta", qty: 1, unit: "box", category: "Grains", lowAt: 1, expires: "" },
+          ],
+          grocery: [],
+        };
+      }
+
+      _loadState() {
+        try {
+          const saved = JSON.parse(localStorage.getItem(this._storageKey) || "null");
+          if (saved?.pantry && saved?.grocery) return saved;
+        } catch (error) {
+          console.warn("Unable to load pantry", error);
+        }
+        return this._defaultState();
+      }
+
+      _saveState() {
+        localStorage.setItem(this._storageKey, JSON.stringify(this._state));
+      }
+
+      _id() {
+        return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      }
+
+      _recipes() {
+        return [
+          { name: "Chicken burrito bowls", ingredients: ["Rice", "Black beans", "Chicken breast", "Tomatoes"], tags: ["Dinner", "High protein"] },
+          { name: "Pasta pomodoro", ingredients: ["Pasta", "Tomatoes", "Olive oil", "Garlic"], tags: ["Quick", "Vegetarian"] },
+          { name: "Breakfast tacos", ingredients: ["Eggs", "Tortillas", "Cheese", "Salsa"], tags: ["Breakfast"] },
+          { name: "Fried rice", ingredients: ["Rice", "Eggs", "Frozen vegetables", "Soy sauce"], tags: ["Quick"] },
+          { name: "Bean chili", ingredients: ["Black beans", "Tomatoes", "Onion", "Chili powder"], tags: ["One pot", "Vegetarian"] },
+          { name: "Chicken noodle soup", ingredients: ["Chicken breast", "Pasta", "Carrots", "Celery"], tags: ["Comfort"] },
+        ];
+      }
+
+      _norm(value) {
+        return String(value || "").trim().toLowerCase();
+      }
+
+      _escape(value) {
+        return String(value || "").replace(/[&<>"']/g, (char) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#039;",
+        }[char]));
+      }
+
+      _pantryNames() {
+        return new Set(this._state.pantry.filter((item) => Number(item.qty) > 0).map((item) => this._norm(item.name)));
+      }
+
+      _recipeMatches() {
+        const available = this._pantryNames();
+        return this._recipes().map((recipe) => {
+          const have = recipe.ingredients.filter((item) => available.has(this._norm(item)));
+          const missing = recipe.ingredients.filter((item) => !available.has(this._norm(item)));
+          return { ...recipe, have, missing, score: Math.round((have.length / recipe.ingredients.length) * 100) };
+        }).sort((a, b) => b.score - a.score || a.missing.length - b.missing.length);
+      }
+
+      _lowItems() {
+        return this._state.pantry.filter((item) => Number(item.qty) <= Number(item.lowAt || 0));
+      }
+
+      _expiringItems() {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const soon = new Date(today);
+        soon.setDate(today.getDate() + 7);
+        return this._state.pantry.filter((item) => {
+          if (!item.expires) return false;
+          const date = new Date(`${item.expires}T00:00:00`);
+          return date >= today && date <= soon;
+        });
+      }
+
+      _addPantry(form) {
+        const data = new FormData(form);
+        const name = String(data.get("name") || "").trim();
+        if (!name) return;
+        this._state.pantry.push({
+          id: this._id(),
+          name,
+          qty: Number(data.get("qty") || 1),
+          unit: String(data.get("unit") || "each"),
+          category: String(data.get("category") || "Pantry"),
+          lowAt: Number(data.get("lowAt") || 1),
+          expires: String(data.get("expires") || ""),
+        });
+        form.reset();
+        this._persist("Added pantry item");
+      }
+
+      _adjustItem(id, delta) {
+        const item = this._state.pantry.find((entry) => entry.id === id);
+        if (!item) return;
+        item.qty = Math.max(0, Number(item.qty || 0) + delta);
+        this._persist();
+      }
+
+      _deleteItem(id) {
+        this._state.pantry = this._state.pantry.filter((item) => item.id !== id);
+        this._persist();
+      }
+
+      _addGrocery(name, source = "Manual") {
+        const clean = String(name || "").trim();
+        if (!clean) return;
+        const exists = this._state.grocery.some((item) => this._norm(item.name) === this._norm(clean) && !item.done);
+        if (!exists) this._state.grocery.push({ id: this._id(), name: clean, source, done: false });
+      }
+
+      _addLowToGrocery() {
+        this._lowItems().forEach((item) => this._addGrocery(item.name, "Low stock"));
+        this._persist("Added low-stock items to grocery list");
+      }
+
+      _addMissingRecipe(recipeName) {
+        const recipe = this._recipeMatches().find((item) => item.name === recipeName);
+        if (!recipe) return;
+        recipe.missing.forEach((item) => this._addGrocery(item, recipe.name));
+        this._persist("Added recipe ingredients");
+      }
+
+      _toggleGrocery(id) {
+        const item = this._state.grocery.find((entry) => entry.id === id);
+        if (!item) return;
+        item.done = !item.done;
+        this._persist();
+      }
+
+      _removeGrocery(id) {
+        this._state.grocery = this._state.grocery.filter((item) => item.id !== id);
+        this._persist();
+      }
+
+      async _sendToShoppingList() {
+        const pending = this._state.grocery.filter((item) => !item.done);
+        if (!pending.length) {
+          this._message = "No pending grocery items";
+          this._render();
+          return;
+        }
+        try {
+          for (const item of pending) {
+            await this._hass.callService("shopping_list", "add_item", { name: item.name });
+          }
+          this._message = "Sent to Home Assistant shopping list";
+        } catch (error) {
+          console.error("Unable to update shopping list", error);
+          this._message = "Could not send to Home Assistant shopping list";
+        }
+        this._render();
+      }
+
+      _persist(message = "") {
+        this._message = message;
+        this._saveState();
+        this._render();
+      }
+
+      _render() {
+        if (!this.config) return;
+        const low = this._lowItems();
+        const expiring = this._expiringItems();
+        const recipes = this._recipeMatches();
+        const grocery = this._state.grocery;
+
+        this.shadowRoot.innerHTML = `
+          <style>
+            :host {
+              display: block;
+              min-height: 100vh;
+              color: #273033;
+              font-family: Arial, sans-serif;
+            }
+            ha-card {
+              min-height: 100vh;
+              border-radius: 0;
+              box-shadow: none;
+              background: #fbfaf6;
+              padding: 22px;
+              box-sizing: border-box;
+            }
+            .topbar {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              gap: 16px;
+              margin-bottom: 18px;
+            }
+            h1 {
+              margin: 0;
+              font: 700 30px Georgia, "Times New Roman", serif;
+            }
+            .stats {
+              display: flex;
+              gap: 10px;
+              flex-wrap: wrap;
+            }
+            .stat {
+              min-width: 92px;
+              border-radius: 8px;
+              background: white;
+              border: 1px solid #e3e2dc;
+              padding: 9px 12px;
+              font-weight: 800;
+              color: #4c5960;
+            }
+            .stat strong {
+              display: block;
+              color: #20282c;
+              font-size: 21px;
+            }
+            .layout {
+              display: grid;
+              grid-template-columns: minmax(360px, 1.1fr) minmax(300px, 0.9fr);
+              gap: 18px;
+            }
+            .panel {
+              background: white;
+              border: 1px solid #e2e0d9;
+              border-radius: 8px;
+              padding: 16px;
+              min-width: 0;
+            }
+            .panel h2 {
+              margin: 0 0 12px;
+              font-size: 18px;
+            }
+            .form-grid {
+              display: grid;
+              grid-template-columns: 2fr 0.8fr 0.8fr 1fr 0.8fr 1fr auto;
+              gap: 8px;
+              margin-bottom: 14px;
+            }
+            input, select, button {
+              min-height: 38px;
+              border-radius: 7px;
+              border: 1px solid #d7ddd9;
+              font: 700 13px Arial, sans-serif;
+              box-sizing: border-box;
+            }
+            input, select {
+              padding: 0 10px;
+              background: #fff;
+            }
+            button {
+              border: 0;
+              background: #4c7c87;
+              color: white;
+              padding: 0 12px;
+              cursor: pointer;
+            }
+            button.secondary {
+              background: #edf2f3;
+              color: #40515a;
+            }
+            button.danger {
+              background: #f4d6cd;
+              color: #8b301f;
+            }
+            .inventory {
+              display: grid;
+              gap: 8px;
+            }
+            .item {
+              display: grid;
+              grid-template-columns: 1fr auto auto auto;
+              align-items: center;
+              gap: 8px;
+              border: 1px solid #eceae3;
+              border-radius: 8px;
+              padding: 10px;
+              background: #fffefa;
+            }
+            .item.low {
+              border-color: #efc66b;
+              background: #fff7df;
+            }
+            .item-name {
+              font-weight: 900;
+            }
+            .meta {
+              color: #69757b;
+              font-size: 12px;
+              font-weight: 700;
+              margin-top: 3px;
+            }
+            .qty {
+              min-width: 74px;
+              text-align: center;
+              font-weight: 900;
+            }
+            .mini {
+              width: 34px;
+              min-height: 34px;
+              padding: 0;
+            }
+            .side {
+              display: grid;
+              gap: 18px;
+            }
+            .grocery-row {
+              display: grid;
+              grid-template-columns: auto 1fr auto;
+              gap: 8px;
+              align-items: center;
+              border-bottom: 1px solid #eeeeea;
+              padding: 9px 0;
+              font-weight: 800;
+            }
+            .grocery-row.done span {
+              text-decoration: line-through;
+              color: #9aa3a7;
+            }
+            .recipe {
+              border: 1px solid #eceae3;
+              border-radius: 8px;
+              padding: 12px;
+              margin-bottom: 10px;
+              background: #fffefa;
+            }
+            .recipe-head {
+              display: flex;
+              justify-content: space-between;
+              gap: 10px;
+              font-weight: 900;
+            }
+            .score {
+              color: #4c7c87;
+            }
+            .tags {
+              display: flex;
+              gap: 6px;
+              flex-wrap: wrap;
+              margin: 8px 0;
+            }
+            .tag {
+              border-radius: 999px;
+              background: #edf2f3;
+              color: #56666f;
+              padding: 4px 8px;
+              font-size: 12px;
+              font-weight: 800;
+            }
+            .missing {
+              color: #87503c;
+              font-size: 13px;
+              font-weight: 700;
+              margin-bottom: 9px;
+            }
+            .alert {
+              border-radius: 8px;
+              background: #fff4d8;
+              color: #6f5120;
+              padding: 10px 12px;
+              font-weight: 800;
+              margin-bottom: 10px;
+            }
+            .message {
+              color: #4c7c87;
+              font-weight: 900;
+            }
+            @media (max-width: 980px) {
+              ha-card {
+                padding: 14px;
+              }
+              .layout, .form-grid {
+                grid-template-columns: 1fr;
+              }
+              .topbar {
+                align-items: flex-start;
+                flex-direction: column;
+              }
+            }
+          </style>
+          <ha-card>
+            <div class="topbar">
+              <h1>${this._escape(this.config.title)}</h1>
+              <div class="stats">
+                <div class="stat"><strong>${this._state.pantry.length}</strong>Items</div>
+                <div class="stat"><strong>${low.length}</strong>Low</div>
+                <div class="stat"><strong>${grocery.filter((item) => !item.done).length}</strong>Grocery</div>
+              </div>
+            </div>
+            <div class="layout">
+              <section class="panel">
+                <h2>Pantry Inventory</h2>
+                ${expiring.length ? `<div class="alert">${expiring.length} item${expiring.length === 1 ? "" : "s"} expiring within 7 days</div>` : ""}
+                <form class="form-grid" data-action="add-pantry">
+                  <input name="name" placeholder="Item" required>
+                  <input name="qty" type="number" min="0" step="0.25" value="1" aria-label="Quantity">
+                  <input name="unit" placeholder="Unit" value="each">
+                  <input name="category" placeholder="Category" value="Pantry">
+                  <input name="lowAt" type="number" min="0" step="0.25" value="1" aria-label="Low at">
+                  <input name="expires" type="date" aria-label="Expiration">
+                  <button type="submit">Add</button>
+                </form>
+                <div class="inventory">
+                  ${this._state.pantry.map((item) => `
+                    <div class="item ${Number(item.qty) <= Number(item.lowAt || 0) ? "low" : ""}">
+                      <div>
+                        <div class="item-name">${this._escape(item.name)}</div>
+                        <div class="meta">${this._escape(item.category)}${item.expires ? ` · expires ${this._escape(item.expires)}` : ""}</div>
+                      </div>
+                      <button class="mini secondary" type="button" data-action="decrement" data-id="${item.id}">-</button>
+                      <div class="qty">${this._escape(item.qty)} ${this._escape(item.unit)}</div>
+                      <button class="mini secondary" type="button" data-action="increment" data-id="${item.id}">+</button>
+                      <button class="danger" type="button" data-action="delete-item" data-id="${item.id}">Remove</button>
+                    </div>
+                  `).join("")}
+                </div>
+              </section>
+              <div class="side">
+                <section class="panel">
+                  <h2>Grocery List</h2>
+                  <form class="form-grid" data-action="add-grocery">
+                    <input name="name" placeholder="Add grocery item" required>
+                    <button type="submit">Add</button>
+                  </form>
+                  <div>
+                    ${grocery.map((item) => `
+                      <div class="grocery-row ${item.done ? "done" : ""}">
+                        <input type="checkbox" ${item.done ? "checked" : ""} data-action="toggle-grocery" data-id="${item.id}">
+                        <span>${this._escape(item.name)} <small class="meta">${this._escape(item.source)}</small></span>
+                        <button class="mini danger" type="button" data-action="remove-grocery" data-id="${item.id}">x</button>
+                      </div>
+                    `).join("") || `<div class="meta">No grocery items yet.</div>`}
+                  </div>
+                  <div class="tags">
+                    <button type="button" data-action="add-low">Add low-stock items</button>
+                    <button type="button" data-action="send-shopping">Send to HA Shopping List</button>
+                  </div>
+                  ${this._message ? `<div class="message">${this._escape(this._message)}</div>` : ""}
+                </section>
+                <section class="panel">
+                  <h2>Recipe Suggestions</h2>
+                  ${recipes.map((recipe) => `
+                    <div class="recipe">
+                      <div class="recipe-head"><span>${this._escape(recipe.name)}</span><span class="score">${recipe.score}%</span></div>
+                      <div class="tags">${recipe.tags.map((tag) => `<span class="tag">${this._escape(tag)}</span>`).join("")}</div>
+                      <div class="missing">${recipe.missing.length ? `Missing: ${recipe.missing.map((item) => this._escape(item)).join(", ")}` : "You have everything for this."}</div>
+                      ${recipe.missing.length ? `<button type="button" data-action="add-recipe" data-recipe="${this._escape(recipe.name)}">Add missing ingredients</button>` : ""}
+                    </div>
+                  `).join("")}
+                </section>
+              </div>
+            </div>
+          </ha-card>
+        `;
+        this._bind();
+      }
+
+      _bind() {
+        this.shadowRoot.querySelectorAll("[data-action]").forEach((node) => {
+          const action = node.dataset.action;
+          if (node.tagName === "FORM") {
+            node.addEventListener("submit", (event) => {
+              event.preventDefault();
+              if (action === "add-pantry") this._addPantry(node);
+              if (action === "add-grocery") {
+                const data = new FormData(node);
+                this._addGrocery(data.get("name"), "Manual");
+                node.reset();
+                this._persist("Added grocery item");
+              }
+            });
+            return;
+          }
+          node.addEventListener("click", () => {
+            if (action === "increment") this._adjustItem(node.dataset.id, 1);
+            if (action === "decrement") this._adjustItem(node.dataset.id, -1);
+            if (action === "delete-item") this._deleteItem(node.dataset.id);
+            if (action === "toggle-grocery") this._toggleGrocery(node.dataset.id);
+            if (action === "remove-grocery") this._removeGrocery(node.dataset.id);
+            if (action === "add-low") this._addLowToGrocery();
+            if (action === "add-recipe") this._addMissingRecipe(node.dataset.recipe);
+            if (action === "send-shopping") this._sendToShoppingList();
+          });
+        });
+      }
+    }
+
+    customElements.define("smart-pantry-card", SmartPantryCard);
 
   skylight-calendar-card.js: |
     class SkylightCalendarCard extends HTMLElement {

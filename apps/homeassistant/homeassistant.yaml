@@ -23,7 +23,7 @@ spec:
   template:
     metadata:
       annotations:
-        skylight-dashboard-version: no-action-avatars-v1
+        skylight-dashboard-version: smart-pantry-v1
       labels:
         app: homeassistant
     spec:
