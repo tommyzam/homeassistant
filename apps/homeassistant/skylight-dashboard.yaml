@@ -56,7 +56,7 @@ data:
         }
 
     items = resources.setdefault("data", {}).setdefault("items", [])
-    url = "/local/skylight-calendar-card.js?v=9"
+    url = "/local/skylight-calendar-card.js?v=10"
     items[:] = [item for item in items if "skylight-calendar-card.js" not in item.get("url", "")]
     items.append({"id": "skylight_calendar_card", "url": url, "type": "module"})
     storage_path.write_text(json.dumps(resources, indent=2) + "\n")
@@ -616,7 +616,7 @@ data:
               display: flex;
               flex-direction: column;
               align-items: center;
-              gap: 18px;
+              gap: 10px;
               font-size: 11px;
             }
 
@@ -632,8 +632,9 @@ data:
               color: #687782;
             }
 
-            .sleep {
-              margin-top: auto;
+            .nav .active {
+              color: #2f444f;
+              font-weight: 800;
             }
 
             .main {
@@ -1151,14 +1152,7 @@ data:
               <aside class="sidebar">
                 <div class="logo">S</div>
                 <nav class="nav">
-                  <span><ha-icon icon="mdi:calendar-month"></ha-icon>Calendar</span>
-                  <span><ha-icon icon="mdi:broom"></ha-icon>Chores</span>
-                  <span><ha-icon icon="mdi:image"></ha-icon>Photos</span>
-                  <span><ha-icon icon="mdi:format-list-checks"></ha-icon>Lists</span>
-                </nav>
-                <nav class="nav sleep">
-                  <span><ha-icon icon="mdi:weather-night"></ha-icon>Sleep</span>
-                  <span><ha-icon icon="mdi:cog-outline"></ha-icon>Settings</span>
+                  <span class="active"><ha-icon icon="mdi:calendar-month"></ha-icon>Calendar</span>
                 </nav>
               </aside>
               <main class="main">
