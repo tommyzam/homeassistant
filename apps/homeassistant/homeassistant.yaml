@@ -23,7 +23,7 @@ spec:
   template:
     metadata:
       annotations:
-        skylight-dashboard-version: full-height-v1
+        skylight-dashboard-version: no-wall-dashboard-v1
       labels:
         app: homeassistant
     spec:
