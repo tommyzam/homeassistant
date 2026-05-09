@@ -23,7 +23,7 @@ spec:
   template:
     metadata:
       annotations:
-        skylight-dashboard-version: sidebar-clean-v1
+        skylight-dashboard-version: no-sidebar-v1
       labels:
         app: homeassistant
     spec:

@@ -56,7 +56,7 @@ data:
         }
 
     items = resources.setdefault("data", {}).setdefault("items", [])
-    url = "/local/skylight-calendar-card.js?v=10"
+    url = "/local/skylight-calendar-card.js?v=11"
     items[:] = [item for item in items if "skylight-calendar-card.js" not in item.get("url", "")]
     items.append({"id": "skylight_calendar_card", "url": url, "type": "module"})
     storage_path.write_text(json.dumps(resources, indent=2) + "\n")
@@ -584,57 +584,8 @@ data:
             }
 
             .shell {
-              display: grid;
-              grid-template-columns: 74px 1fr;
               height: 100%;
               min-height: 720px;
-            }
-
-            .sidebar {
-              background: #eaf2f7;
-              border-right: 1px solid #d8e2e8;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              gap: 18px;
-              padding: 18px 8px;
-              font-family: Arial, sans-serif;
-              color: #4d5962;
-            }
-
-            .logo {
-              width: 42px;
-              height: 42px;
-              display: grid;
-              place-items: center;
-              background: white;
-              color: #9aa7ae;
-              font: 24px Georgia, serif;
-            }
-
-            .nav {
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              gap: 10px;
-              font-size: 11px;
-            }
-
-            .nav span {
-              display: grid;
-              place-items: center;
-              gap: 5px;
-            }
-
-            .nav ha-icon {
-              width: 21px;
-              height: 21px;
-              color: #687782;
-            }
-
-            .nav .active {
-              color: #2f444f;
-              font-weight: 800;
             }
 
             .main {
@@ -1118,10 +1069,6 @@ data:
                 min-height: 620px;
               }
 
-              .shell {
-                grid-template-columns: 56px 1fr;
-              }
-
               .topbar {
                 align-items: flex-start;
                 flex-direction: column;
@@ -1149,12 +1096,6 @@ data:
           </style>
           <ha-card>
             <div class="shell">
-              <aside class="sidebar">
-                <div class="logo">S</div>
-                <nav class="nav">
-                  <span class="active"><ha-icon icon="mdi:calendar-month"></ha-icon>Calendar</span>
-                </nav>
-              </aside>
               <main class="main">
                 <section class="topbar">
                   <div class="title">
