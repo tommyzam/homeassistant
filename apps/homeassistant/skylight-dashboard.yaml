@@ -56,7 +56,7 @@ data:
         }
 
     items = resources.setdefault("data", {}).setdefault("items", [])
-    url = "/local/skylight-calendar-card.js?v=11"
+    url = "/local/skylight-calendar-card.js?v=12"
     items[:] = [item for item in items if "skylight-calendar-card.js" not in item.get("url", "")]
     items.append({"id": "skylight_calendar_card", "url": url, "type": "module"})
     storage_path.write_text(json.dumps(resources, indent=2) + "\n")
@@ -569,14 +569,14 @@ data:
             :host {
               display: block;
               height: 100%;
-              min-height: 720px;
+              min-height: 100vh;
               color: #28251f;
               font-family: Georgia, "Times New Roman", serif;
             }
 
             ha-card {
               height: 100%;
-              min-height: 720px;
+              min-height: 100vh;
               border-radius: 0;
               box-shadow: none;
               background: #f8f7f3;
@@ -585,11 +585,13 @@ data:
 
             .shell {
               height: 100%;
-              min-height: 720px;
+              min-height: 100vh;
             }
 
             .main {
               min-width: 0;
+              height: 100%;
+              min-height: 100vh;
               display: grid;
               grid-template-rows: auto auto 1fr;
               background: white;
@@ -829,7 +831,7 @@ data:
                 }).join(",")}
               );
               overflow: hidden;
-              min-height: 520px;
+              min-height: 0;
             }
 
             .event {
@@ -1066,7 +1068,7 @@ data:
               :host,
               ha-card,
               .shell {
-                min-height: 620px;
+                min-height: 100vh;
               }
 
               .topbar {
