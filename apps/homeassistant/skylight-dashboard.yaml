@@ -131,8 +131,9 @@ data:
         type: panel
         badges: []
         cards:
-          - type: custom:smart-pantry-card
-            title: Smart Pantry
+          - type: iframe
+            url: https://pantry.lab.lan
+            aspect_ratio: 100%
 
   smart-pantry-card.js: |
     class SmartPantryCard extends HTMLElement {

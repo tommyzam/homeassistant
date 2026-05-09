@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#4c7c87">
+    <title>Smart Pantry</title>
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <div>
+          <h1>Smart Pantry</h1>
+          <p>Inventory, groceries, and meal ideas from what you already have.</p>
+        </div>
+        <div class="stats">
+          <div><strong id="stat-items">0</strong><span>Items</span></div>
+          <div><strong id="stat-low">0</strong><span>Low</span></div>
+          <div><strong id="stat-grocery">0</strong><span>Grocery</span></div>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <div class="panel inventory-panel">
+          <div class="panel-head">
+            <h2>Pantry</h2>
+            <button id="seed-demo" class="secondary">Demo Items</button>
+          </div>
+          <form id="pantry-form" class="item-form">
+            <input name="name" placeholder="Item" required>
+            <input name="qty" type="number" min="0" step="0.25" value="1" aria-label="Quantity">
+            <input name="unit" placeholder="Unit" value="each">
+            <input name="category" placeholder="Category" value="Pantry">
+            <input name="lowAt" type="number" min="0" step="0.25" value="1" aria-label="Low at">
+            <input name="expires" type="date" aria-label="Expiration date">
+            <button type="submit">Add</button>
+          </form>
+          <div id="alerts"></div>
+          <div id="inventory" class="inventory"></div>
+        </div>
+
+        <aside class="side">
+          <section class="panel">
+            <h2>Grocery List</h2>
+            <form id="grocery-form" class="compact-form">
+              <input name="name" placeholder="Add grocery item" required>
+              <button type="submit">Add</button>
+            </form>
+            <div class="button-row">
+              <button id="add-low" class="secondary">Add Low Stock</button>
+              <button id="clear-done" class="secondary">Clear Done</button>
+            </div>
+            <div id="grocery-list" class="grocery-list"></div>
+          </section>
+
+          <section class="panel">
+            <h2>Receipt Import</h2>
+            <p class="hint">Paste receipt text for now. Photo OCR/barcode scanning come next.</p>
+            <textarea id="receipt-text" placeholder="PASTE RECEIPT ITEMS HERE&#10;BANANAS 2.49&#10;CHICKEN BREAST 12.99"></textarea>
+            <button id="parse-receipt">Review Import</button>
+            <div id="receipt-review"></div>
+          </section>
+        </aside>
+      </section>
+
+      <section class="panel recipes-panel">
+        <h2>Recipe Suggestions</h2>
+        <div id="recipes" class="recipes"></div>
+      </section>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

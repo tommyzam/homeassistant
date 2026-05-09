@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pantry
+  namespace: ha
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pantry
+  template:
+    metadata:
+      labels:
+        app: pantry
+    spec:
+      containers:
+      - name: pantry
+        image: ghcr.io/tommyzam/smart-pantry:stable
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pantry
+  namespace: ha
+spec:
+  selector:
+    app: pantry
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pantry
+  namespace: ha
+  annotations:
+    cert-manager.io/cluster-issuer: local-ca
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - pantry.lab.lan
+    secretName: pantry-lab-lan-tls
+  rules:
+  - host: pantry.lab.lan
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: pantry
+            port:
+              number: 80

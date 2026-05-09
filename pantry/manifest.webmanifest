@@ -1,0 +1,9 @@
+{
+  "name": "Smart Pantry",
+  "short_name": "Pantry",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fbfaf6",
+  "theme_color": "#4c7c87",
+  "icons": []
+}

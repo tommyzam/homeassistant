@@ -1,0 +1,297 @@
+:root {
+  color: #273033;
+  background: #fbfaf6;
+  font-family: Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #fbfaf6;
+}
+
+.app {
+  min-height: 100vh;
+  padding: 22px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+h1 {
+  margin: 0;
+  font: 700 34px Georgia, "Times New Roman", serif;
+}
+
+h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+p {
+  margin: 6px 0 0;
+  color: #657176;
+  font-weight: 700;
+}
+
+.stats {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.stats div {
+  min-width: 96px;
+  border-radius: 8px;
+  background: white;
+  border: 1px solid #e3e2dc;
+  padding: 10px 12px;
+}
+
+.stats strong {
+  display: block;
+  font-size: 24px;
+}
+
+.stats span {
+  color: #6d777c;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(380px, 1.25fr) minmax(320px, 0.75fr);
+  gap: 18px;
+}
+
+.side {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+
+.panel {
+  background: white;
+  border: 1px solid #e2e0d9;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.item-form {
+  display: grid;
+  grid-template-columns: 2fr 0.8fr 0.8fr 1fr 0.8fr 1fr auto;
+  gap: 8px;
+  margin: 12px 0 14px;
+}
+
+.compact-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+input,
+textarea,
+button {
+  border-radius: 7px;
+  font: 700 13px Arial, sans-serif;
+}
+
+input,
+textarea {
+  width: 100%;
+  border: 1px solid #d7ddd9;
+  background: white;
+  color: #273033;
+  padding: 0 10px;
+}
+
+input,
+button {
+  min-height: 38px;
+}
+
+textarea {
+  min-height: 120px;
+  padding: 10px;
+  resize: vertical;
+}
+
+button {
+  border: 0;
+  background: #4c7c87;
+  color: white;
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: #edf2f3;
+  color: #40515a;
+}
+
+button.danger {
+  background: #f4d6cd;
+  color: #8b301f;
+}
+
+.button-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.inventory,
+.grocery-list,
+.recipes {
+  display: grid;
+  gap: 8px;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #eceae3;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fffefa;
+}
+
+.item.low {
+  border-color: #efc66b;
+  background: #fff7df;
+}
+
+.item-name,
+.recipe-name {
+  font-weight: 900;
+}
+
+.meta,
+.hint {
+  color: #69757b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.qty {
+  min-width: 78px;
+  text-align: center;
+  font-weight: 900;
+}
+
+.mini {
+  width: 34px;
+  min-height: 34px;
+  padding: 0;
+}
+
+.alert {
+  border-radius: 8px;
+  background: #fff4d8;
+  color: #6f5120;
+  padding: 10px 12px;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.grocery-row,
+.review-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  border-bottom: 1px solid #eeeeea;
+  padding: 9px 0;
+  font-weight: 800;
+}
+
+.grocery-row.done span {
+  text-decoration: line-through;
+  color: #9aa3a7;
+}
+
+.recipe {
+  border: 1px solid #eceae3;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fffefa;
+}
+
+.recipe-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.score {
+  color: #4c7c87;
+  font-weight: 900;
+}
+
+.tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+
+.tag {
+  border-radius: 999px;
+  background: #edf2f3;
+  color: #56666f;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.missing {
+  color: #87503c;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 9px;
+}
+
+.recipes-panel {
+  margin-top: 18px;
+}
+
+@media (max-width: 980px) {
+  .app {
+    padding: 14px;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .workspace,
+  .item-form {
+    grid-template-columns: 1fr;
+  }
+
+  .item {
+    grid-template-columns: 1fr auto auto;
+  }
+}
