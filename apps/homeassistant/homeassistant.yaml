@@ -23,7 +23,7 @@ spec:
   template:
     metadata:
       annotations:
-        skylight-dashboard-version: no-wall-dashboard-v1
+        skylight-dashboard-version: calendar-counts-v1
       labels:
         app: homeassistant
     spec:

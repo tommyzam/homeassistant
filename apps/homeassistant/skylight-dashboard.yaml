@@ -65,7 +65,7 @@ data:
         }
 
     items = resources.setdefault("data", {}).setdefault("items", [])
-    url = "/local/skylight-calendar-card.js?v=12"
+    url = "/local/skylight-calendar-card.js?v=13"
     items[:] = [item for item in items if "skylight-calendar-card.js" not in item.get("url", "")]
     items.append({"id": "skylight_calendar_card", "url": url, "type": "module"})
     storage_path.write_text(json.dumps(resources, indent=2) + "\n")
@@ -748,7 +748,7 @@ data:
               grid-column: 2 / 4;
               height: 7px;
               border-radius: 999px;
-              background: linear-gradient(90deg, var(--person-color) 68%, #e5e8eb 68%);
+              background: linear-gradient(90deg, var(--person-color) var(--person-fill), #e5e8eb var(--person-fill));
             }
 
             .calendar {
@@ -799,8 +799,8 @@ data:
               gap: 6px;
               font-size: 12px;
               font-weight: 700;
-              background: #f7b6a3;
-              color: #653527;
+              background: var(--event-color, #f7b6a3);
+              color: #2f302b;
               white-space: nowrap;
               overflow: hidden;
               text-overflow: ellipsis;
@@ -1130,18 +1130,23 @@ data:
                   </div>
                 </section>
                 <section class="people">
-                  ${calendars.map((calendar) => {
-                    const count = this._events.filter((event) => event.entity_id === calendar.entity).length;
+                  ${(() => {
+                    const counts = calendars.map((calendar) => this._events.filter((event) => event.entity_id === calendar.entity).length);
+                    const maxCount = Math.max(1, ...counts);
+                    return calendars.map((calendar, index) => {
+                    const count = counts[index];
+                    const fill = `${Math.round((count / maxCount) * 100)}%`;
                     const active = this._activeCalendar === "all" || this._activeCalendar === calendar.entity;
                     return `
-                      <button class="person ${active ? "active" : ""}" type="button" data-action="filter-calendar" data-entity="${calendar.entity}" style="--person-color:${calendar.color}">
+                      <button class="person ${active ? "active" : ""}" type="button" data-action="filter-calendar" data-entity="${calendar.entity}" style="--person-color:${calendar.color}; --person-fill:${fill}">
                         <span class="avatar" style="background:${calendar.color}">${calendar.initial || calendar.name?.[0] || "?"}</span>
                         <span class="name">${calendar.name || calendar.entity}</span>
                         <span class="count">${count}</span>
                         <span class="line"></span>
                       </button>
                     `;
-                  }).join("")}
+                    }).join("");
+                  })()}
                 </section>
                 <section class="calendar">
                   <div></div>
@@ -1156,7 +1161,10 @@ data:
                     const allDay = this._visibleEventsForDay(day).filter((event) => this._allDay(event)).slice(0, 1);
                     return `
                       <div class="all-day">
-                        ${allDay.map((event) => `<button class="meal" type="button" data-action="select-event" data-event-id="${this._eventId(event)}"><ha-icon icon="mdi:calendar-star"></ha-icon>${this._escape(event.summary || event.message || "All day")}</button>`).join("")}
+                        ${allDay.map((event) => {
+                          const calendar = this._calendarFor(event.entity_id);
+                          return `<button class="meal" type="button" data-action="select-event" data-event-id="${this._eventId(event)}" style="--event-color:${calendar.color || "#f7b6a3"}"><ha-icon icon="mdi:calendar-star"></ha-icon>${this._escape(event.summary || event.message || "All day")}</button>`;
+                        }).join("")}
                         ${!allDay.length ? `<button class="meal add-meal" type="button" data-action="create-all-day" data-date="${this._dateKey(day)}"><ha-icon icon="mdi:plus"></ha-icon>Add</button>` : ""}
                       </div>
                     `;
